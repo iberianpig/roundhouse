@@ -1519,6 +1519,9 @@ end
         }
     }
 
+    // The Vite build manifest (`bin/vite build`). `ingest::vite` uses it
+    // to resolve the vite_rails tag helpers.
+    app.vite_manifest = super::vite::read_manifest(vfs, dir);
     // `InertiaRails.configure` options that change the page object
     // (`ingest::inertia` writes them into each rewritten `render inertia:`).
     {
@@ -1527,7 +1530,8 @@ end
             for entry in read_rb_files(vfs, &init_dir)? {
                 if let Ok(bytes) = vfs.read(&entry) {
                     let file = entry.display().to_string();
-                    if let Some(config) = extract_inertia_config(&bytes, &file, None) {
+                    let digest = app.vite_manifest.as_ref().map(|m| m.digest.as_str());
+                    if let Some(config) = extract_inertia_config(&bytes, &file, digest) {
                         app.inertia = Some(config);
                     }
                 }
@@ -1807,6 +1811,7 @@ end
     super::invisible_captcha::lower_invisible_captcha(&mut app);
     super::impersonates::lower_impersonates(&mut app);
     super::inertia::lower_inertia(&mut app);
+    super::vite::lower_vite_tags(&mut app);
     // The real drain, now that every pass re-ingesting synthesized
     // Ruby has run. A synthesized `"<label>"` re-ingest never takes a
     // slot (`sources::register` refuses a label starting with `<`), so

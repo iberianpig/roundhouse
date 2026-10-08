@@ -63,6 +63,11 @@ pub struct App {
     /// gem's defaults.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub inertia: Option<InertiaConfig>,
+    /// The Vite build's manifest (`public/<publicOutputDir>/.vite/manifest.json`,
+    /// written by `bin/vite build`), from which `ingest::vite` resolves the
+    /// vite_rails tag helpers at build time. None when the app has no build.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub vite_manifest: Option<ViteManifest>,
     /// Logical stylesheet names discovered in `app/assets/stylesheets/`
     /// + `app/assets/builds/` (file stems without `.css`). When the
     /// ERB uses `stylesheet_link_tag :app, ...`, Rails with Propshaft
@@ -598,6 +603,23 @@ impl MixinKind {
 /// A Rails-style importmap: one `<name>` → `<path>` entry per
 /// pin, in declaration order (Rails preserves order for
 /// modulepreload link emission).
+/// A Vite build manifest: each chunk keyed by its source name, and the
+/// public directory its files are served from (`/vite`). `digest`
+/// identifies the build and replaces `ViteRuby.digest`.
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize, Default)]
+pub struct ViteManifest {
+    pub public_dir: String,
+    pub digest: String,
+    pub chunks: std::collections::BTreeMap<String, ViteChunk>,
+}
+
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize, Default)]
+pub struct ViteChunk {
+    pub file: String,
+    pub css: Vec<String>,
+    pub imports: Vec<String>,
+}
+
 /// `InertiaRails.configure` options with a server-side effect. `version`
 /// is the asset version the client echoes in `X-Inertia-Version`
 /// (empty: none configured).
@@ -725,6 +747,7 @@ impl App {
             seeds: None,
             importmap: None,
             inertia: None,
+            vite_manifest: None,
             stylesheets: Vec::new(),
             rbs_signatures: HashMap::new(),
             rbs_includes: HashMap::new(),

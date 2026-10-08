@@ -8521,3 +8521,76 @@ end
         .run_test("test/controllers/inertia_articles_controller_test.rb")
         .assert_passes();
 }
+
+/// vite_rails' tags are resolved from the Vite manifest at build time:
+/// the entry's script, a modulepreload link per imported chunk
+/// (depth-first) and every stylesheet, as vite_rails renders them in
+/// production; the dev-server and SSR helpers render nothing.
+/// `ViteRuby.digest` as the Inertia version identifies the build. Without
+/// `use_script_element_for_initial_page`, the page JSON is in the
+/// `data-page` attribute.
+#[test]
+fn vite_tags_resolve_from_the_manifest() {
+    const MANIFEST: &str = r#"{
+  "entrypoints/inertia.jsx": {"file": "assets/inertia-abc.js", "src": "entrypoints/inertia.jsx", "isEntry": true,
+                              "imports": ["_ui-1.js", "_react-2.js"], "css": ["assets/inertia-abc.css"]},
+  "_ui-1.js": {"file": "assets/ui-1.js", "imports": ["_react-2.js"], "css": ["assets/ui-1.css"]},
+  "_react-2.js": {"file": "assets/react-2.js"}
+}
+"#;
+    emit_and_run::real_blog()
+        .write("public/vite/.vite/manifest.json", MANIFEST)
+        .write("public/vite/assets/inertia-abc.js", "console.log('inertia');\n")
+        .write(
+            "config/initializers/inertia_rails.rb",
+            "InertiaRails.configure do |config|\n  config.version = ViteRuby.digest\nend\n",
+        )
+        .edit(
+            "app/views/layouts/application.html.erb",
+            "    <%= javascript_importmap_tags %>\n",
+            "    <%= javascript_importmap_tags %>\n    <%= vite_react_refresh_tag %>\n    <%= vite_client_tag %>\n    <%= vite_javascript_tag \"inertia.jsx\" %>\n    <%= inertia_ssr_head %>\n",
+        )
+        .edit(
+            "config/routes.rb",
+            "  root \"articles#index\"\n",
+            "  root \"articles#index\"\n  get \"/pages/show\", to: \"pages#show\"\n",
+        )
+        .write(
+            "app/controllers/pages_controller.rb",
+            "class PagesController < ApplicationController\n  def show\n    render inertia: \"pages/show\"\n  end\nend\n",
+        )
+        .write(
+            "test/controllers/pages_controller_test.rb",
+            &(r##"require "test_helper"
+
+class PagesControllerTest < ActionDispatch::IntegrationTest
+  MANIFEST = <<-'JSON'
+"##.to_string()
+                + MANIFEST
+                + r##"JSON
+
+  test "the layout includes the build's tags and the page includes its digest" do
+    get "/pages/show"
+    assert_response :success
+    tags = %(<script src="/vite/assets/inertia-abc.js" crossorigin="" type="module"></script>) +
+      %(<link rel="modulepreload" href="/vite/assets/react-2.js" as="script" crossorigin="">\n) +
+      %(<link rel="modulepreload" href="/vite/assets/ui-1.js" as="script" crossorigin="">) +
+      %(<link rel="stylesheet" crossorigin="" href="/vite/assets/inertia-abc.css" />\n) +
+      %(<link rel="stylesheet" crossorigin="" href="/vite/assets/ui-1.css" />)
+    assert_includes response.body, tags
+    assert_no_match(/vite_|@vite|RefreshRuntime/, response.body)
+    digest = "cbf29ce484222325".to_i(16)
+    mask = 2**64 - 1
+    MANIFEST.each_byte do |b|
+      digest = ((digest ^ b) * 0x100000001b3) & mask
+    end
+    assert_includes response.body, %(<div id="app" data-page="{&quot;component&quot;:&quot;pages/show&quot;,&quot;props&quot;:{},) +
+      %(&quot;url&quot;:&quot;/pages/show&quot;,&quot;version&quot;:&quot;#{format("%016x", digest)}&quot;,)
+    assert File.exist?("public/vite/assets/inertia-abc.js")
+  end
+end
+"##),
+        )
+        .run_test("test/controllers/pages_controller_test.rb")
+        .assert_passes();
+}
