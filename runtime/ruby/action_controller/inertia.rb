@@ -215,11 +215,13 @@ module ActionController
                  inertia_header("HTTP_X_INERTIA_PARTIAL_DATA"),
                  inertia_header("HTTP_X_INERTIA_PARTIAL_EXCEPT"))
       stored = session["inertia_errors"]
-      if stored.nil?
-        page.prop_json("errors", "{}") if always_include_errors_hash
-      else
+      if !stored.nil?
         session.delete("inertia_errors")
+        page.shared_eager?("errors")
         page.prop_json("errors", stored.to_s)
+      elsif always_include_errors_hash
+        page.shared_eager?("errors")
+        page.prop_json("errors", "{}")
       end
       nil
     end

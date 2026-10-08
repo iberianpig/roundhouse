@@ -8406,3 +8406,118 @@ end
         .run_test("test/controllers/pages_controller_test.rb")
         .assert_passes();
 }
+
+/// The rest of the Inertia protocol, tested on one controller: props
+/// shared from `ApplicationController` (lambda, static and optional), the
+/// version check, partial reloads, a deferred prop, and a failed Inertia
+/// PATCH that redirects with 303 and whose errors appear in the next visit.
+#[test]
+fn inertia_protocol_shared_props_reloads_deferral_and_errors() {
+    emit_and_run::real_blog()
+        .edit(
+            "config/routes.rb",
+            "  root \"articles#index\"\n",
+            "  root \"articles#index\"\n  get \"/inertia_articles\", to: \"inertia_articles#index\"\n  patch \"/inertia_articles\", to: \"inertia_articles#update\"\n",
+        )
+        .write(
+            "config/initializers/inertia_rails.rb",
+            "InertiaRails.configure do |config|\n  config.version = \"v1\"\n  config.encrypt_history = true\n  config.always_include_errors_hash = true\n  config.use_script_element_for_initial_page = true\nend\n",
+        )
+        .edit(
+            "app/controllers/application_controller.rb",
+            "class ApplicationController < ActionController::Base\n",
+            "class ApplicationController < ActionController::Base\n  inertia_share articleCount: -> { Article.count },\n                appName: \"Real Blog\",\n                secret: InertiaRails.optional { \"opt\" }\n",
+        )
+        .write(
+            "app/controllers/inertia_articles_controller.rb",
+            r#"class InertiaArticlesController < ApplicationController
+  def index
+    render inertia: "inertia_articles/index", props: {
+      titles: Article.order(:id).pluck(:title),
+      inertiaVisit: request.inertia?,
+      stats: InertiaRails.defer { { total: Article.count } }
+    }
+  end
+
+  def update
+    if params[:title].to_s.empty?
+      redirect_to "/inertia_articles", inertia: { errors: { title: ["can't be blank"] } }
+    else
+      redirect_to "/inertia_articles"
+    end
+  end
+end
+"#,
+        )
+        .write(
+            "test/controllers/inertia_articles_controller_test.rb",
+            r#"require "test_helper"
+
+class InertiaArticlesControllerTest < ActionDispatch::IntegrationTest
+  INERTIA = { "X-Inertia" => "true", "X-Inertia-Version" => "v1" }
+
+  test "a first visit includes shared props and lists the deferred one" do
+    get "/inertia_articles"
+    assert_response :success
+    props = %("props":{"errors":{},"articleCount":#{Article.count},"appName":"Real Blog",) +
+      %("titles":#{Article.order(:id).pluck(:title).to_json},"inertiaVisit":false},)
+    assert_includes response.body, props
+    assert_includes response.body, %("version":"v1","encryptHistory":true,"clearHistory":false,)
+    assert_includes response.body, %("sharedProps":["errors","articleCount","appName","secret"],"deferredProps":{"default":["stats"]}})
+  end
+
+  test "an Inertia visit with the current version gets JSON" do
+    get "/inertia_articles", headers: INERTIA
+    assert_response :success
+    page = response.parsed_body
+    assert_equal %w[errors articleCount appName titles inertiaVisit], page["props"].keys
+    assert_equal true, page["props"]["inertiaVisit"]
+    assert_equal({ "default" => ["stats"] }, page["deferredProps"])
+  end
+
+  test "a stale version gets 409 and the URL to reload" do
+    get "/inertia_articles", headers: { "X-Inertia" => "true", "X-Inertia-Version" => "v0" }
+    assert_response 409
+    assert_equal "http://www.example.com/inertia_articles", response.headers["x-inertia-location"]
+  end
+
+  test "a partial reload answers only the props it names" do
+    get "/inertia_articles", headers: INERTIA.merge("X-Inertia-Partial-Component" => "inertia_articles/index",
+                                                    "X-Inertia-Partial-Data" => "secret,stats")
+    page = response.parsed_body
+    assert_equal({ "errors" => {}, "secret" => "opt", "stats" => { "total" => Article.count } }, page["props"])
+    assert_nil page["deferredProps"]
+  end
+
+  test "a partial reload can leave props out" do
+    get "/inertia_articles", headers: INERTIA.merge("X-Inertia-Partial-Component" => "inertia_articles/index",
+                                                    "X-Inertia-Partial-Except" => "titles,articleCount")
+    assert_equal %w[errors appName secret inertiaVisit stats], response.parsed_body["props"].keys
+  end
+
+  test "partial headers for another component are ignored" do
+    get "/inertia_articles", headers: INERTIA.merge("X-Inertia-Partial-Component" => "other/page",
+                                                    "X-Inertia-Partial-Data" => "secret")
+    assert_equal %w[errors articleCount appName titles inertiaVisit], response.parsed_body["props"].keys
+  end
+
+  test "a failed Inertia PATCH redirects with 303 and the errors reach the next visit once" do
+    patch "/inertia_articles", params: { title: "" }, headers: INERTIA
+    assert_response 303
+    assert_redirected_to "/inertia_articles"
+    get "/inertia_articles", headers: INERTIA
+    assert_equal({ "title" => ["can't be blank"] }, response.parsed_body["props"]["errors"])
+    get "/inertia_articles", headers: INERTIA
+    assert_equal({}, response.parsed_body["props"]["errors"])
+  end
+
+  test "a PATCH outside Inertia keeps its 302" do
+    patch "/inertia_articles", params: { title: "ok" }
+    assert_response 302
+  end
+end
+"#,
+        )
+        .run_test("test/controllers/inertia_articles_controller_test.rb")
+        .assert_passes();
+}

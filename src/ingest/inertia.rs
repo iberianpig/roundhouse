@@ -372,6 +372,12 @@ fn redirect_replacement(e: &Expr) -> Option<Expr> {
     let span = e.span;
     let mut stmts = Vec::new();
     if let Some(errors) = errors {
+        // The gem stores `errors.to_hash`; a Hash literal already is one.
+        let errors = if matches!(&*errors.node, ExprNode::Hash { .. }) {
+            errors
+        } else {
+            call(errors.span, Some(errors), "to_hash", Vec::new())
+        };
         stmts.push(call(span, None, "inertia_errors", vec![errors]));
     }
     let kept: Vec<(Expr, Expr)> = entries
