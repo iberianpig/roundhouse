@@ -225,6 +225,12 @@ module ActionDispatch
       @env.fetch("HTTP_X_REQUESTED_WITH", "").to_s == "XMLHttpRequest"
     end
 
+    # inertia_rails' `request.inertia?`: the Inertia client sends
+    # `X-Inertia: true` on every visit after the first.
+    def inertia?
+      @env.fetch("HTTP_X_INERTIA", "").to_s != ""
+    end
+
     def fullpath
       if @query_string == ""
         @path

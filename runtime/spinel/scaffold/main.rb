@@ -454,6 +454,12 @@ module Main
     # The body's declared type, for the one route that checks it
     # against what was promised: Active Storage's direct-upload PUT.
     request_obj.env["CONTENT_TYPE"] = req.req_headers.fetch("content-type", "")
+    # The Inertia protocol headers (runtime/action_controller/inertia.rb).
+    request_obj.env["HTTP_X_INERTIA"] = req.req_headers.fetch("x-inertia", "")
+    request_obj.env["HTTP_X_INERTIA_VERSION"] = req.req_headers.fetch("x-inertia-version", "")
+    request_obj.env["HTTP_X_INERTIA_PARTIAL_COMPONENT"] = req.req_headers.fetch("x-inertia-partial-component", "")
+    request_obj.env["HTTP_X_INERTIA_PARTIAL_DATA"] = req.req_headers.fetch("x-inertia-partial-data", "")
+    request_obj.env["HTTP_X_INERTIA_PARTIAL_EXCEPT"] = req.req_headers.fetch("x-inertia-partial-except", "")
     controller.request = request_obj
     controller.query_string = request_obj.query_string
     ActionController::Current.request = request_obj

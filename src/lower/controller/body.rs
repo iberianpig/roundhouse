@@ -982,8 +982,18 @@ pub fn implicit_render_statement(
 /// had just written. The response was a 204 with an empty body, and the
 /// test failed decoding it: "buffer is not in a known format", which
 /// names the image library and nothing about the terminal.
-const RESPONSE_TERMINALS: &[&str] =
-    &["render", "redirect_to", "redirect_back_or_to", "head", "send_data", "send_file"];
+///
+/// `render_inertia_json` is the JSON branch of a rewritten `render
+/// inertia:` (`ingest::inertia`); it renders or answers 409.
+const RESPONSE_TERMINALS: &[&str] = &[
+    "render",
+    "redirect_to",
+    "redirect_back_or_to",
+    "head",
+    "send_data",
+    "send_file",
+    "render_inertia_json",
+];
 
 /// Rails' HTTP auth helpers that render the 401 challenge when the
 /// credentials are missing or refused. They MIGHT respond, so a filter

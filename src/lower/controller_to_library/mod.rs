@@ -25,6 +25,7 @@
 //! the synthesized `MethodDef`.
 
 mod broadcasts;
+mod inertia;
 mod process_action;
 pub mod params;
 pub mod rewrites;
@@ -2910,6 +2911,7 @@ fn lower_action_body(
     // `rewrite_redirect_to`, just on the kwarg position rather than
     // the first positional arg.
     let with_render = rewrite_render_location_kwarg(&with_render);
+    let with_render = inertia::encode_inertia_values(&with_render);
     let with_params = rewrite_params(&with_render);
     // After bare `params.expect(...)` / `params.require(:r).permit(...)`
     // canonicalize via `rewrite_params`, replace each permit chain with

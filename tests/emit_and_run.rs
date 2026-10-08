@@ -8350,3 +8350,59 @@ raise article.top_word.inspect unless article.top_word == "b"
         )
         .assert_passes();
 }
+
+/// `render inertia:` answers a first visit with the page object inside
+/// the app layout, and an Inertia visit (`X-Inertia: true`) with the page
+/// object as JSON. These are inertia_rails' two response types.
+#[test]
+fn render_inertia_answers_html_and_json_visits() {
+    emit_and_run::real_blog()
+        .edit(
+            "config/routes.rb",
+            "  root \"articles#index\"\n",
+            "  root \"articles#index\"\n  get \"/pages/show\", to: \"pages#show\"\n",
+        )
+        .write(
+            "config/initializers/inertia_rails.rb",
+            "InertiaRails.configure do |config|\n  config.use_script_element_for_initial_page = true\nend\n",
+        )
+        .write(
+            "app/controllers/pages_controller.rb",
+            r#"class PagesController < ApplicationController
+  def show
+    render inertia: "pages/show", props: { title: "Hello </script>", count: Article.count }
+  end
+end
+"#,
+        )
+        .write(
+            "test/controllers/pages_controller_test.rb",
+            r#"require "test_helper"
+
+class PagesControllerTest < ActionDispatch::IntegrationTest
+  test "a first visit renders the page object inside the layout" do
+    get "/pages/show"
+    assert_response :success
+    page = %({"component":"pages/show","props":{"title":"Hello \\u003c/script\\u003e","count":#{Article.count}},) +
+      %("url":"/pages/show","version":null,"encryptHistory":false,"clearHistory":false})
+    assert_includes response.body, %(<script data-page="app" type="application/json">#{page}</script>\n<div id="app"></div>)
+    assert_includes response.body, "<title>Real Blog</title>"
+    assert_equal "X-Inertia", response.headers["vary"]
+  end
+
+  test "an Inertia visit gets the page object as JSON" do
+    get "/pages/show", headers: { "X-Inertia" => "true" }
+    assert_response :success
+    assert_equal "true", response.headers["x-inertia"]
+    assert_equal "X-Inertia", response.headers["vary"]
+    page = response.parsed_body
+    assert_equal "pages/show", page["component"]
+    assert_equal({ "title" => "Hello </script>", "count" => Article.count }, page["props"])
+    assert_equal "/pages/show", page["url"]
+  end
+end
+"#,
+        )
+        .run_test("test/controllers/pages_controller_test.rb")
+        .assert_passes();
+}
