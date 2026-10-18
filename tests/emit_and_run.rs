@@ -7,6 +7,8 @@
 
 #[path = "support/emit_and_run.rs"]
 mod emit_and_run;
+#[path = "emit_and_run/utc_zone_time.rs"]
+mod utc_zone_time;
 #[path = "emit_and_run/discard.rs"]
 mod discard;
 #[path = "emit_and_run/pay_exceptions.rs"]
