@@ -2996,6 +2996,7 @@ fn ingest_explicit_route(
     let mut as_name: Option<Symbol> = None;
     let mut action_kwarg: Option<String> = None;
     let mut controller_kwarg: Option<String> = None;
+    let mut defaults_format: Option<String> = None;
     // The INLINE spelling of `member do … end` / `collection do … end`.
     // Rails accepts both, and campfire writes `delete :clear, on:
     // :collection`; only the block form was recognized, so the route was
@@ -3099,6 +3100,17 @@ fn ingest_explicit_route(
                     // `expand_match_via` once the entry is built. Other
                     // string-value options become routing constraints.
                     "via" => {}
+                    "defaults" => {
+                        if let Some(defaults) = value.as_hash_node() {
+                            for entry in defaults.elements().iter() {
+                                if let Some(pair) = entry.as_assoc_node()
+                                    && symbol_value(&pair.key()).as_deref() == Some("format")
+                                {
+                                    defaults_format = rname(&pair.value());
+                                }
+                            }
+                        }
+                    }
                     // `constraints: { id: /\d+/, tag: /[^,.\/]+/ }` —
                     // per-param regex restrictions. Capture each param's
                     // regex SOURCE (raw text between the delimiters, so
@@ -3126,6 +3138,10 @@ fn ingest_explicit_route(
                 }
             }
         }
+    }
+
+    if let Some(format) = defaults_format {
+        constraints.insert(Symbol::from("format"), format);
     }
 
     if let Some((location, status, keep_query)) = redirect_target {
