@@ -7,6 +7,8 @@
 
 #[path = "support/emit_and_run.rs"]
 mod emit_and_run;
+#[path = "emit_and_run/date_calendar_duration.rs"]
+mod date_calendar_duration;
 #[path = "emit_and_run/discard.rs"]
 mod discard;
 #[path = "emit_and_run/pay_exceptions.rs"]

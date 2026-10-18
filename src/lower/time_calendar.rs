@@ -204,7 +204,30 @@ pub(crate) fn rewrite_node(expr: &mut Expr) {
     *expr.node = active_support_call(target, call_args);
 }
 
+pub(crate) fn date_calendar_duration(expr: &Expr) -> Option<(&'static str, &Expr)> {
+    let ExprNode::Send { recv: Some(count), method, args, block: None, .. } = &*expr.node else { return None };
+    if !args.is_empty() || !matches!(count.ty, Some(Ty::Int)) {
+        return None;
+    }
+    let unit = match method.as_str() {
+        "day" | "days" => "days",
+        "week" | "weeks" => "weeks",
+        "month" | "months" => "months",
+        "year" | "years" => "years",
+        _ => return None,
+    };
+    Some((unit, count))
+}
+
 fn rewrite_date_value(expr: &mut Expr, r: &Expr, method: &str, args: &[Expr]) {
+    if matches!(method, "+" | "-") && args.len() == 1
+        && let Some((unit, count)) = date_calendar_duration(&args[0])
+    {
+        let direction = if method == "+" { "since" } else { "ago" };
+        *expr.node = active_support_call(&format!("date_{unit}_{direction}"), vec![r.clone(), count.clone()]);
+        expr.ty = Some(Ty::Date);
+        return;
+    }
     if method == "in_time_zone" && args.len() <= 1 {
         let midnight = time_expr(active_support_call("date_at_midnight", vec![r.clone()]));
         let grounded = match args.first() {
