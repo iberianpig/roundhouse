@@ -33,8 +33,7 @@ module Arel
       text = Nodes.replace_named(text, key, Nodes.embed(named[key.to_sym]))
     end
     if !positional.empty? || !named.empty?
-      missing = Nodes.unbound_name(text)
-      raise BindError, "missing value for :#{missing}" unless missing.nil?
+      Nodes.validate_named_binds(text)
     end
     Nodes::SqlLiteral.new(text)
   end
@@ -218,9 +217,9 @@ module Arel
       count
     end
 
-    # The first `:name` still in `text` after substitution, outside a
+    # Reject a `:name` still in `text` after substitution, outside a
     # string and not the second colon of a PostgreSQL cast.
-    def self.unbound_name(text)
+    def self.validate_named_binds(text)
       i = 0
       quoted = false
       while i < text.length
@@ -233,7 +232,7 @@ module Arel
         elsif !quoted && ch == ":" && prev != ":" && name_start?(nxt)
           j = i + 1
           j += 1 while j < text.length && !name_boundary?(text[j, 1])
-          return text[i + 1, j - i - 1]
+          raise BindError, "missing value for :#{text[i + 1, j - i - 1]}"
         else
           i += 1
         end

@@ -77,11 +77,18 @@ begin
   raise "extra bind was accepted"
 rescue Arel::BindError
 end
+fragment = "title = :missing AND rank = :rank".freeze
 begin
-  Arel.sql("title = :missing", name: "Ada")
+  Arel.sql(fragment, rank: 2)
   raise "missing named bind was accepted"
-rescue Arel::BindError
+rescue Arel::BindError => error
+  raise error.message unless error.message == "missing value for :missing"
 end
+raise fragment unless fragment == "title = :missing AND rank = :rank"
+quoted = Arel.sql("title = ':quoted' AND rank = :rank", rank: 2).to_s
+raise quoted unless quoted == "title = ':quoted' AND rank = 2"
+cast = Arel.sql("rank::text = :rank", rank: 2).to_s
+raise cast unless cast == "rank::text = 2"
 quoted_case = Arel::Nodes::Case.new.when("title = 'x'").then("high").else(nil).to_s
 raise quoted_case unless quoted_case == "CASE WHEN 'title = ''x''' THEN 'high' ELSE NULL END"
 ordered = Note.order(Arel.sql("CASE WHEN title = :name THEN 1 ELSE 0 END", name: "Ada")).map(&:title)

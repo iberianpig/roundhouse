@@ -51,7 +51,7 @@ module Arel
     def self.replace_named: (String text, String key, String literal) -> String
     def self.name_boundary?: (String? ch) -> bool
     def self.count_questions: (String text) -> Integer
-    def self.unbound_name: (String text) -> String?
+    def self.validate_named_binds: (String text) -> nil
     def self.name_start?: (String? ch) -> bool
 
     class Node
